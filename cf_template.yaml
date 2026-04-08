@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: EC2 with Flask app pulling code from S3
+Description: EC2 instance running a Flask app with code pulled from S3
 
 Parameters:
   InstanceType:
@@ -12,11 +12,9 @@ Parameters:
 
   S3BucketName:
     Type: String
-    Description: Name of the S3 bucket containing application files
 
   EnvValue:
     Type: String
-    Description: Value to set for MY_ENV_VAR environment variable
 
 Resources:
 
@@ -30,7 +28,6 @@ Resources:
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
-
       Policies:
         - PolicyName: S3ReadAccess
           PolicyDocument:
@@ -50,7 +47,7 @@ Resources:
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow HTTP + SSH
+      GroupDescription: Allow HTTP and SSH
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
@@ -66,30 +63,29 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
-      ImageId: ami-0735c191cf914754d  # Ubuntu 22.04 LTS (us-west-2)
+      ImageId: ami-0685c90b40d39e754
       IamInstanceProfile: !Ref InstanceProfile
       SecurityGroupIds:
         - !Ref SecurityGroup
-
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
           apt update -y
           apt install -y python3 python3-pip awscli
 
-          mkdir -p /home/ubuntu/app
+          mkdir /home/ubuntu/app
 
           aws s3 cp s3://${S3BucketName}/application.py /home/ubuntu/app/application.py
           aws s3 cp s3://${S3BucketName}/requirements.txt /home/ubuntu/app/requirements.txt
 
           pip3 install -r /home/ubuntu/app/requirements.txt
 
-          export MY_ENV_VAR="${EnvValue}"
+          export MY_ENV_VAR=${EnvValue}
 
           cd /home/ubuntu/app
           nohup python3 application.py > /home/ubuntu/app/app.log 2>&1 &
 
 Outputs:
   PublicIP:
-    Description: Access the Flask app
+    Description: Public IP of the EC2 instance
     Value: !GetAtt EC2Instance.PublicIp
