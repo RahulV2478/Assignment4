@@ -80,7 +80,7 @@ Resources:
 
           pip3 install -r /home/ubuntu/app/requirements.txt
 
-          export MY_ENV_VAR=${EnvValue}
+          export MY_ENV_VAR="${EnvValue}"
 
           cd /home/ubuntu/app
           nohup python3 application.py > /home/ubuntu/app/app.log 2>&1 &
