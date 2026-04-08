@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: EC2 with Flask app pulling code from S3
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: SSH Key
+
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket containing application files
+
+  EnvValue:
+    Type: String
+    Description: Value to set for MY_ENV_VAR environment variable
+
+Resources:
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+
+      Policies:
+        - PolicyName: S3ReadAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:aws:s3:::${S3BucketName}/*
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP + SSH
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: ami-0735c191cf914754d  # Ubuntu 22.04 LTS (us-west-2)
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt update -y
+          apt install -y python3 python3-pip awscli
+
+          mkdir -p /home/ubuntu/app
+
+          aws s3 cp s3://${S3BucketName}/application.py /home/ubuntu/app/application.py
+          aws s3 cp s3://${S3BucketName}/requirements.txt /home/ubuntu/app/requirements.txt
+
+          pip3 install -r /home/ubuntu/app/requirements.txt
+
+          export MY_ENV_VAR="${EnvValue}"
+
+          cd /home/ubuntu/app
+          nohup python3 application.py > /home/ubuntu/app/app.log 2>&1 &
+
+Outputs:
+  PublicIP:
+    Description: Access the Flask app
+    Value: !GetAtt EC2Instance.PublicIp
